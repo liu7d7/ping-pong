@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>
+      multiplayer games
+    </title>
+    <meta name="viewport" 
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"/>
+  </head>
+  <style>
+    body {
+      -webkit-user-select: none; /* Safari */
+      -ms-user-select: none; /* IE 10 and IE 11 */
+      user-select: none; /* Standard syntax */
+    }
+  </style>
+  <body style="height: 100vh; width: 100vw; padding: 0; margin: 0; overflow: clip">
+    <canvas style="height: 100%; padding: 0; margin: 0" id="canvas"></canvas>
+  </body>
+  <script>
+    const socket = new WebSocket("ws://10.153.34.95:8080");
+    socket.binaryType = 'arraybuffer';
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.canvas.width = window.innerWidth;
+    ctx.canvas.height = window.innerHeight;
+    let aspect = window.innerWidth / window.innerHeight;
+    const PT_pos = 0;
+    const PT_new_player = 1;
+    const PT_del_player = 2;
+    const PT_ack_conn = 3;
+    const PT_activity = 4;
+    const PT_conway_set = 5;
+    const PT_conway_clear = 6;
+    const PT_team_select = 7;
+    const PT_importance = 8;
+    const ACT_intro = 0;
+    const ACT_conway_set = 1;
+    const ACT_conway_run = 2;
+    let myId = 0, ackd;
+    let times = 0;
+    let players = {};
+    let activity;
+    let conway = Array(256*256).fill(0);
+    let impt = 1;
+
+    function my() {
+      return players[myId];
+    }
+
+    socket.addEventListener("open", function (ev) {
+    });
+
+    socket.addEventListener("error", function (ev) {
+      console.log(ev);
+    });
+
+    socket.addEventListener("message", function (message) {
+      console.log(`recv (${message.type}) bin data ${message.data.byteLength} bytes`);
+      let head = 0, len = message.data.byteLength, data = new DataView(message.data);
+      while (head < len) {
+        let type = data.getUint8(head);
+        console.log(`unpacked PT_${type}`);
+        head += 1;
+        switch (type) {
+          case PT_new_player: {
+            let id = data.getInt32(head, true);
+            head += 4;
+            let y = data.getUint16(head, true);
+            head += 2;
+            players[String(id)] = {y};
+
+            console.log("PT_new_player", id, y);
+          } break;
+          case PT_pos: {
+            let id = data.getInt32(head, true);
+            head += 4;
+            let y = data.getUint16(head, true);
+            head += 2;
+
+            players[String(id)].y = y;
+
+            console.log("PT_pos", id, y);
+          } break;
+          case PT_ack_conn: {
+            myId = String(data.getInt32(head, true));
+            head += 4;
+            players[myId] = {x: 0, y: 0}; 
+            activity = data.getUint8(head, true);
+            head += 1;
+            if (!ackd) {
+              requestAnimationFrame(update);
+              ackd = true;
+            }
+
+            console.log("PT_ack_conn", myId, activity);
+          } break;
+          case PT_conway_set: {
+            x = data.getInt16(head, true);
+            head += 2;
+            y = data.getInt16(head, true);
+            head += 2;
+            on = data.getInt8(head, true);
+            head++;
+
+            conway[x + y * 256] = on;
+
+            console.log("PT_conway_set", x, y);
+          } break;
+          case PT_conway_clear: {
+            conway.fill(0);
+            console.log("PT_conway_clear");
+          } break;
+          case PT_importance: {
+            impt = data.getUint8(head);
+            head++;
+            console.log("PT_importance", impt);
+          } break;
+          default: {
+            console.log("ERROR: unknown packet id", type);
+          }
+        }
+      }
+    });
+
+    function position() {
+      lry = my().y;
+      let buffer = new ArrayBuffer(3);
+      let dv = new DataView(buffer);
+      dv.setUint8(0, PT_pos);
+      dv.setUint16(1, Math.floor(my().y * 65536), true);
+      socket.send(buffer);
+    }
+
+    let keys = {};
+
+    addEventListener("keydown", function(ev) {
+      keys[ev.code] = {now: true, prev: ev.repeat};
+    });
+
+    addEventListener("keyup", function(ev) {
+      keys[ev.code] = {now: false, prev: true};
+    });
+
+    addEventListener("resize", function(ev) {
+      ctx.canvas.width = window.innerWidth;
+      ctx.canvas.height = window.innerHeight;
+      aspect = window.innerWidth / window.innerHeight;
+    })
+
+    let cx, cy, lry;
+
+    function mmove(ev) {
+      //if (activity == ACT_conway_set) {
+      //  if (ev.shiftKey && (ev.buttons & 1)) {
+      //    camera.x += ev.movementX / camera.zoom / scale;
+      //    camera.y += ev.movementY / camera.zoom / scale;
+      //  }
+      //  cx = Math.floor(ev.pageX / camera.zoom - camera.x);
+      //  cy = Math.floor(ev.pageY / camera.zoom - camera.y);
+      //}
+
+      if (/*activity == ACT_intro && */team !== undefined) {
+        const y = ev.pageY / window.innerHeight;
+        my().y = y;
+        if (Math.abs(y - lry) > (impt ? 0.005 : 0.01)) {
+          position();
+        }
+      }
+    }
+
+    addEventListener("mousemove", mmove);
+    addEventListener("touchmove", mmove);
+
+    let team, color;
+
+    let ry = 0;
+
+    function mdown(ev) {
+      if (ev.repeat) return;
+
+      //if (activity === ACT_conway_set) {
+      //  let cx = Math.floor(ev.pageX / camera.zoom - camera.x);
+      //  let cy = Math.floor(ev.pageY / camera.zoom - camera.y);
+
+      //  if (cx < 0 || cy < 0 || cx >= 256 || cy >= 256) return;
+
+      //  conway[cx + cy * 256] = !conway[cx + cy * 256];
+      //  let pack = new ArrayBuffer(6);
+      //  let dv = new DataView(pack);
+      //  dv.setUint8(0, PT_conway_set);
+      //  dv.setUint16(1, cx, true);
+      //  dv.setUint16(3, cy, true);
+      //  dv.setUint8(5, conway[cx + cy * 256] ? 1 : 0, true);
+      //  socket.send(pack);
+      //}
+
+      if (/*activity == ACT_intro &&*/ team === undefined) {
+        if (ev.pageX < window.innerWidth / 2) {
+          team = 0;
+          color = "#ffd302";
+        } else {
+          team = 1;
+          color = "#ff1dcf";
+        }
+
+        let buf = new ArrayBuffer(2);
+        let dv = new DataView(buf);
+        dv.setUint8(0, PT_team_select);
+        dv.setUint8(1, team);
+        socket.send(buf);
+
+
+        my().y = ry = 0.5;
+        position();
+      }
+
+    }
+
+    addEventListener("mousedown", mdown);
+    addEventListener("touchstart", mdown);
+
+    let mouse = true
+
+    function update() {
+      ctx.fillStyle = "black"
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      switch (activity) {
+        case ACT_intro: {
+          if (team === undefined) {
+            ctx.fillStyle = "#ffd302";
+            ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+            ctx.fillStyle = "#ff1dcf";
+            ctx.fillRect(canvas.width / 2, 0, canvas.width, canvas.height);
+          } else {
+            ctx.fillStyle = "white";
+            ctx.font = "24px arial";
+            ctx.fillText(mouse, 10, 34);
+            ctx.fillStyle = impt ? color : "white";
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, ry * canvas.height, 10, 0, 2 * Math.PI);
+            ctx.fill();
+            if (keys["ArrowUp"]?.now) my().y -= 0.0066;
+            if (keys["ArrowDown"]?.now) my().y += 0.0066;
+            if (Math.abs(my().y - lry) > (impt ? 0.05 : 0.01)) position();
+            ry = ry + (my().y - ry) * 0.1;
+          }
+
+        } break;
+          //case ACT_conway_set: {
+          //  ctx.fillStyle = "white";
+          //  ctx.font = "24px arial";
+          //  ctx.fillText(`x: ${camera.x}, y: ${camera.y}`, 0, 24);
+          //  ctx.save();
+          //  ctx.scale(camera.zoom, camera.zoom);
+          //  ctx.translate(camera.x, camera.y);
+          //  for (let j = 0; j < 256; j++)
+          //  for (let i = 0; i < 256; i++) {
+          //    if (!conway[j * 256 + i]) continue;
+          //    ctx.fillRect(i, j, 1, 1);
+          //  }
+
+          //  ctx.fillStyle = "lightgray";
+          //  ctx.fillRect(cx, cy, 1, 1);
+          //  ctx.restore();
+          //} break;
+      }
+
+      requestAnimationFrame(update);
+    }
+
+  </script>
+
+</html>
