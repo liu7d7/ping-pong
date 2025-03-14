@@ -18,7 +18,7 @@
     <canvas style="height: 100%; padding: 0; margin: 0" id="canvas"></canvas>
   </body>
   <script>
-    const socket = new WebSocket("ws://10.153.34.95:8080");
+    const socket = new WebSocket("ws://192.168.1.250:8080");
     socket.binaryType = 'arraybuffer';
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
@@ -124,6 +124,7 @@
     });
 
     function position() {
+      my().y = Math.min(0.9999999999999, Math.max(0.0, my().y));
       lry = my().y;
       let buffer = new ArrayBuffer(3);
       let dv = new DataView(buffer);

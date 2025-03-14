@@ -8,6 +8,8 @@
 #include "err.h"
 #include <tgmath.h>
 
+char const *IP = "192.168.1.250:9000";
+
 #define WIN32_LEAN_AND_MEAN
 #define VC_EXTRALEAN
 #define NOGDI
@@ -237,6 +239,7 @@ pack_queue(void *data, size_t len, void *user, bool (*filter)(plyr *, void *))
     if (!filter(p, user)) continue;
     arr_add_arr(&p->pack, data, len, sizeof(u8));
   }
+
   pthread_mutex_unlock(&plyr_mtx);
 }
 
@@ -390,12 +393,6 @@ draw_intro()
     DrawText(buf, w / 2 + pad, pad, font_size, WHITE);
   }
 
-  if (is_started && GetTime() - pong.lu_time > 0.01667) {
-    pong.x += pong.vx;
-    pong.y += pong.vy;
-    pong.lu_time = GetTime();
-  }
-
   BeginBlendMode(1);
 
   float avg_y[] = {0, 0};
@@ -420,15 +417,29 @@ draw_intro()
   DrawRectangleV((Vector2){40, avg_y[0] - 80}, (Vector2){10, 160}, (Color){0xff, 0xd3, 0x02, 100});
   DrawRectangleV((Vector2){w - 50, avg_y[1] - 80}, (Vector2){10, 160}, (Color){0xff, 0x1d, 0xcf, 100});
 
-  if (pong.y > h - 15) {
-    pong.y = h - 15;
-    pong.vy *= -1;
+  float dt = GetTime() - pong.lu_time;
+  pong.lu_time = GetTime();
+
+#define N_STEPS 16
+  for (int i = 0; i < N_STEPS; i++) {
+    if (is_started) {
+      pong.x += pong.vx * dt / N_STEPS;
+      pong.y += pong.vy * dt / N_STEPS;
+    }
+
+    if (pong.y > h - 15) {
+      pong.y = h - 15;
+      pong.vy *= -1;
+      break;
+    }
+
+    if (pong.y < 15) {
+      pong.y = 15;
+      pong.vy *= -1;
+      break;
+    }
   }
 
-  if (pong.y < 15) {
-    pong.y = 15;
-    pong.vy *= -1;
-  }
 
   int won = false;
 
@@ -474,7 +485,7 @@ draw_intro()
     pong.start_time = GetTime() + 3.1;
     pong.x = w / 2;
     pong.y = h / 2;
-    pong.vx = (won ? won : -1) * 8;
+    pong.vx = (won ? won : -1) * 256;
     pong.vy = 0;
     if (IsKeyPressed(KEY_S)) {
       pong.l_score = pong.r_score = 0;
