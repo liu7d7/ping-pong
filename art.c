@@ -381,9 +381,10 @@ draw_intro()
 
   bool is_started = pong.start_time < GetTime();
 
+  const int font_size = 100;
+  const int pad = 20;
+
   if (is_started) {
-    const int font_size = 100;
-    const int pad = 20;
     char buf[10];
     sprintf_s(buf, sizeof(buf), "%d", pong.l_score);
     auto size = MeasureTextEx(GetFontDefault(), buf, font_size, 1);
@@ -458,7 +459,7 @@ draw_intro()
   if (pong.x < 65 && pong.x > 55 && fabs(pong.y - avg_y[0]) < 80) {
     pong.x = 65;
     pong.vx *= -1;
-    pong.vy += (avg_y[0] - pong.prev_avg_y_0) * 2;
+    pong.vy += (avg_y[0] - pong.prev_avg_y_0) * 200;
     hit = true;
   }
 
@@ -520,6 +521,9 @@ draw_intro()
 
     pong.side = side;
   }
+
+  auto size = MeasureTextEx(GetFontDefault(), IP, font_size, 1);
+  DrawText(IP, pad, h - pad - size.y, font_size, WHITE);
 }
 
 void
